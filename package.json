@@ -1,0 +1,21 @@
+{
+  "name": "maestro-supervisor",
+  "version": "0.1.0",
+  "description": "Watchdog for Maestro agent fleets: stuck/loop detection, progress summaries, handover suggestions.",
+  "license": "MIT",
+  "author": "tdat-dev",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
