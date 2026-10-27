@@ -21,9 +21,7 @@ import { suggestPartition } from "./suggest.js";
 import { findCardConflicts } from "./cardconflicts.js";
 import { verdictDone } from "./verdict.js";
 import { formatVerdictLine } from "./report.js";
-import { buildProgressPrompt, type Summarizer } from "./summarize.js";
-import { isAuthError, llamaFromEnv } from "./llama.js";
-import { isOllamaUp, ollamaFromEnv } from "./ollama.js";
+import { readAgentSummary } from "./selfsummary.js";
 
 interface Args {
   fleet: string;
@@ -52,25 +50,13 @@ function parseArgs(argv: string[]): Args {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** At most one summary call per agent per window (first poll summarizes now). */
-const SUMMARY_EVERY_MS = 5 * 60_000;
-
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const cookie = args.cookie ?? process.env.MAESTRO_DASH_COOKIE;
   let tracker: TrackerState = {};
-  const cloud = llamaFromEnv();
-  const local = ollamaFromEnv();
-  let summarizer: Summarizer | null = cloud;
-  if (!summarizer) {
-    if (await isOllamaUp(local.baseUrl)) {
-      summarizer = local.summarizer;
-      console.log(`summaries via local Ollama (${local.model}).`);
-    } else {
-      console.log("summaries off: set LLAMA_API_KEY or start Ollama (`ollama pull llama3.1:8b`).");
-    }
-  }
-  const lastSummaryAt = new Map<string, number>();
+  // Agent-written summaries: each agent keeps .maestro/summary-<pane>.md
+  // updated (see docs/AGENT-SUMMARY.md). Printed only when changed.
+  const lastSummary = new Map<string, string>();
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
@@ -150,30 +136,13 @@ async function main(): Promise<void> {
         );
         console.log(to ? `    → hand over to ${to.to}? (${to.reason}; needs your click)` : "    → nobody idle to hand over to");
       }
-      // Progress summaries last: slow network calls never delay the alerts above.
-      // Failures degrade to a one-line warning per agent per window.
-      if (summarizer) {
-        for (const s of samples) {
-          if (s.status === "stopped") continue;
-          if (now - (lastSummaryAt.get(s.id) ?? 0) < SUMMARY_EVERY_MS) continue;
-          lastSummaryAt.set(s.id, now);
-          const agent = snap.agents.find((a) => a.id === s.id);
-          try {
-            const text = await summarizer.summarize(
-              buildProgressPrompt({
-                name: s.name,
-                status: s.finished ? `finished (${s.finished})` : s.status,
-                uptime: agent?.uptime ?? "",
-                cards: cardsOf(boards.get(s.projectDir) ?? { version: 0, lists: [] }, s.name),
-                tail: snap.output[s.id] ?? "",
-              }),
-            );
-            console.log(`  ~ SUMMARY ${s.name}: ${text}`);
-          } catch (e) {
-            const why = cloud && isAuthError(e) ? "check LLAMA_API_KEY" : e instanceof Error ? e.message.slice(0, 120) : String(e);
-            console.log(`  ~ SUMMARY ${s.name}: unavailable (${why})`);
-          }
-        }
+      // Agent-written summaries last: cheap file reads, printed on change.
+      for (const s of samples) {
+        if (s.status === "stopped") continue;
+        const text = readAgentSummary(s.projectDir, s.name);
+        if (text === null || text === lastSummary.get(s.id)) continue;
+        lastSummary.set(s.id, text);
+        console.log(`  ~ SUMMARY ${s.name}: ${text}`);
       }
     } catch (e) {
       console.log(`--- fleet unreachable (${(e as Error).message}). Is Maestro running with Settings → Remote on? Retrying…`);
