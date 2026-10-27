@@ -23,6 +23,7 @@ import { verdictDone } from "./verdict.js";
 import { formatVerdictLine } from "./report.js";
 import { classifySummary } from "./summarystatus.js";
 import { pickRescue } from "./rescuepick.js";
+import { askPrint } from "./askline.js";
 
 interface Args {
   fleet: string;
@@ -57,6 +58,8 @@ async function main(): Promise<void> {
   let tracker: TrackerState = {};
   // Agent-written summaries: missing/stale/fresh per agent, printed on change.
   const lastSummaryState = new Map<string, string>();
+  // Waiting questions, printed once per episode (cleared when resolved).
+  const lastAskState = new Map<string, string>();
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
@@ -127,7 +130,10 @@ async function main(): Promise<void> {
         console.log("  " + formatVerdictLine(s.name, s.finished, verdictDone(evidence)));
         for (const w of warnings) console.log(`    (evidence warn: ${w})`);
       }
-      for (const alert of detectStuck(tracker, now, DEFAULT_DETECTOR_OPTIONS)) {
+      const alerts = detectStuck(tracker, now, DEFAULT_DETECTOR_OPTIONS);
+      const waitingIds = new Set(alerts.filter((a) => a.kind === "waiting").map((a) => a.agentId));
+      for (const id of [...lastAskState.keys()]) if (!waitingIds.has(id)) lastAskState.delete(id);
+      for (const alert of alerts) {
         console.log(`  ! STUCK [${alert.kind}] ${alert.detail}`);
         const to = suggestHandover(
           alert.name,
@@ -137,6 +143,14 @@ async function main(): Promise<void> {
         console.log(to ? `    → hand over to ${to.to}? (${to.reason}; needs your click)` : "    → nobody idle to hand over to");
         const rescue = pickRescue(alert.kind);
         if (rescue) console.log(`    ↻ rescue (${rescue.kind}): ${rescue.line}`);
+        if (alert.kind === "waiting") {
+          const ap = askPrint(alert.name, snap.output[alert.agentId] ?? "");
+          const key = ap ? `ask:${ap.key}` : "ask:none";
+          if (key !== lastAskState.get(alert.agentId)) {
+            lastAskState.set(alert.agentId, key);
+            if (ap) for (const line of ap.lines) console.log(line);
+          }
+        }
       }
       // Agent-written summaries last: cheap file reads, printed on change.
       for (const s of samples) {
