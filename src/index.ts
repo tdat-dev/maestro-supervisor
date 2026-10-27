@@ -14,7 +14,8 @@ import {
   type TrackerState,
 } from "./stuck.js";
 import { suggestHandover } from "./handover.js";
-import { collectEvidence } from "./evidence.js";
+import { collectDiffFiles, collectEvidence } from "./evidence.js";
+import { findFileConflicts } from "./fileconflicts.js";
 import { findCardConflicts } from "./cardconflicts.js";
 import { verdictDone } from "./verdict.js";
 import { formatVerdictLine } from "./report.js";
@@ -88,6 +89,17 @@ async function main(): Promise<void> {
       for (const s of samples) {
         const cards = cardsOf(boards.get(s.projectDir) ?? { version: 0, lists: [] }, s.name);
         console.log(`  ${s.name} [${s.status}]${s.finished ? ` (${s.finished})` : ""}${cards.length ? ` — ${cards[0]}` : ""}`);
+      }
+      // Same-file alarm: one diff listing per project dir per poll.
+      const diffFilesByDir = new Map<string, string[]>();
+      for (const dir of new Set(samples.map((s) => s.projectDir).filter(Boolean))) {
+        const { files } = await collectDiffFiles(dir);
+        diffFilesByDir.set(dir, files);
+      }
+      for (const c of findFileConflicts(
+        samples.map((s) => ({ name: s.name, projectDir: s.projectDir, diffFiles: diffFilesByDir.get(s.projectDir) ?? [] })),
+      )) {
+        console.log(`  ${c.line}`);
       }
       for (const s of samples) {
         if (!s.finished || !s.projectDir) continue;
