@@ -22,6 +22,7 @@ import { findCardConflicts } from "./cardconflicts.js";
 import { verdictDone } from "./verdict.js";
 import { formatVerdictLine } from "./report.js";
 import { classifySummary } from "./summarystatus.js";
+import { pickRescue } from "./rescuepick.js";
 
 interface Args {
   fleet: string;
@@ -134,6 +135,8 @@ async function main(): Promise<void> {
           samples.map((s) => ({ name: s.name, projectDir: s.projectDir, status: s.status })),
         );
         console.log(to ? `    → hand over to ${to.to}? (${to.reason}; needs your click)` : "    → nobody idle to hand over to");
+        const rescue = pickRescue(alert.kind);
+        if (rescue) console.log(`    ↻ rescue (${rescue.kind}): ${rescue.line}`);
       }
       // Agent-written summaries last: cheap file reads, printed on change.
       for (const s of samples) {
