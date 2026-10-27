@@ -14,6 +14,9 @@ import {
   type TrackerState,
 } from "./stuck.js";
 import { suggestHandover } from "./handover.js";
+import { collectEvidence } from "./evidence.js";
+import { verdictDone } from "./verdict.js";
+import { formatVerdictLine } from "./report.js";
 
 interface Args {
   fleet: string;
@@ -75,6 +78,13 @@ async function main(): Promise<void> {
       for (const s of samples) {
         const cards = cardsOf(boards.get(s.projectDir) ?? { version: 0, lists: [] }, s.name);
         console.log(`  ${s.name} [${s.status}]${s.finished ? ` (${s.finished})` : ""}${cards.length ? ` — ${cards[0]}` : ""}`);
+      }
+      for (const s of samples) {
+        if (!s.finished || !s.projectDir) continue;
+        const board = boards.get(s.projectDir) ?? { version: 0, lists: [] };
+        const { evidence, warnings } = await collectEvidence({ dir: s.projectDir, board, agentName: s.name });
+        console.log("  " + formatVerdictLine(s.name, s.finished, verdictDone(evidence)));
+        for (const w of warnings) console.log(`    (evidence warn: ${w})`);
       }
       for (const alert of detectStuck(tracker, now, DEFAULT_DETECTOR_OPTIONS)) {
         console.log(`  ! STUCK [${alert.kind}] ${alert.detail}`);

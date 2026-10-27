@@ -91,10 +91,12 @@ npm test   # vitest unit tests
 src/
   fleet.ts      poll + parse the /api/fleet snapshot (read-only)
   board.ts      read .maestro/board.json from disk (read-only)
+  evidence.ts   git diff + stub scan + board Done for verdicts
   outbox.ts     rescue send path: short lines into .maestro/outbox.jsonl
   stuck.ts      stuck / waiting-too-long / loop detector (pure, tested)
   traffic.ts    green / yellow / red skin over alerts (pure, tested)
   verdict.ts    fake-done verdict from diff + tests + board (pure, tested)
+  report.ts     verdict output lines for the watch CLI (pure, tested)
   cost.ts       real-money cost line + budget alert (pure, tested)
   gate.ts       risky-command matcher behind one human click (pure, tested)
   summarize.ts  progress summarizer via a Meta model (prompt builder done, wiring next)
