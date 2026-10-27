@@ -82,7 +82,12 @@ async function main(): Promise<void> {
       for (const s of samples) {
         if (!s.finished || !s.projectDir) continue;
         const board = boards.get(s.projectDir) ?? { version: 0, lists: [] };
-        const { evidence, warnings } = await collectEvidence({ dir: s.projectDir, board, agentName: s.name });
+        const { evidence, warnings } = await collectEvidence({
+          dir: s.projectDir,
+          board,
+          agentName: s.name,
+          tail: snap.output[s.id],
+        });
         console.log("  " + formatVerdictLine(s.name, s.finished, verdictDone(evidence)));
         for (const w of warnings) console.log(`    (evidence warn: ${w})`);
       }

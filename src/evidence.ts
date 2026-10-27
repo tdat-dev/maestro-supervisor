@@ -1,6 +1,6 @@
 // Evidence collection for the fake-done verdict: real git diffs, stub/TODO
-// scan over changed lines, and the board card state. It feeds verdictDone()
-// (see verdict.ts); test results wire in when a runner lands.
+// scan over changed lines, test results off the screen tail, and the board
+// card state. It feeds verdictDone() (see verdict.ts).
 
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { BoardFile } from "./board.js";
 import type { DoneEvidence } from "./verdict.js";
+import { testsFromTail } from "./tests.js";
 
 const run = promisify(execFile);
 
@@ -84,6 +85,8 @@ export interface EvidenceInput {
   baseRef?: string;
   board: BoardFile;
   agentName: string;
+  /** Screen tail: test results read off it (no test running here). */
+  tail?: string;
 }
 
 export interface CollectedEvidence {
@@ -92,15 +95,19 @@ export interface CollectedEvidence {
   warnings: string[];
 }
 
-/** Full evidence for one agent: diff files + stub scan + board state.
-//  testsPass stays null until a test runner wires in. */
+/** Full evidence for one agent: diff files + stub scan + tests + board.
+//  testsPass stays null when the tail shows no test run. */
 export async function collectEvidence(input: EvidenceInput): Promise<CollectedEvidence> {
   const { files, warnings } = await collectDiffFiles(input.dir, input.baseRef);
   const stubHits = await scanStubs(input.dir, files);
+  const tailTests: { pass: boolean | null; detail?: string } = input.tail
+    ? testsFromTail(input.tail)
+    : { pass: null };
   return {
     evidence: {
       diffFiles: files,
-      testsPass: null,
+      testsPass: tailTests.pass,
+      ...(tailTests.detail ? { failDetail: tailTests.detail } : {}),
       boardDone: boardCardDone(input.board, input.agentName),
       hasStubOrTodo: stubHits.length > 0,
     },
