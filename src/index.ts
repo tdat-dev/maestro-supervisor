@@ -21,8 +21,9 @@ import { suggestPartition } from "./suggest.js";
 import { findCardConflicts } from "./cardconflicts.js";
 import { verdictDone } from "./verdict.js";
 import { formatVerdictLine } from "./report.js";
-import { buildProgressPrompt } from "./summarize.js";
+import { buildProgressPrompt, type Summarizer } from "./summarize.js";
 import { isAuthError, llamaFromEnv } from "./llama.js";
+import { isOllamaUp, ollamaFromEnv } from "./ollama.js";
 
 interface Args {
   fleet: string;
@@ -58,9 +59,18 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const cookie = args.cookie ?? process.env.MAESTRO_DASH_COOKIE;
   let tracker: TrackerState = {};
-  const summarizer = llamaFromEnv();
+  const cloud = llamaFromEnv();
+  const local = ollamaFromEnv();
+  let summarizer: Summarizer | null = cloud;
+  if (!summarizer) {
+    if (await isOllamaUp(local.baseUrl)) {
+      summarizer = local.summarizer;
+      console.log(`summaries via local Ollama (${local.model}).`);
+    } else {
+      console.log("summaries off: set LLAMA_API_KEY or start Ollama (`ollama pull llama3.1:8b`).");
+    }
+  }
   const lastSummaryAt = new Map<string, number>();
-  if (!summarizer) console.log("summaries off: set LLAMA_API_KEY to enable per-agent progress summaries.");
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
@@ -160,7 +170,7 @@ async function main(): Promise<void> {
             );
             console.log(`  ~ SUMMARY ${s.name}: ${text}`);
           } catch (e) {
-            const why = isAuthError(e) ? "check LLAMA_API_KEY" : e instanceof Error ? e.message.slice(0, 120) : String(e);
+            const why = cloud && isAuthError(e) ? "check LLAMA_API_KEY" : e instanceof Error ? e.message.slice(0, 120) : String(e);
             console.log(`  ~ SUMMARY ${s.name}: unavailable (${why})`);
           }
         }
