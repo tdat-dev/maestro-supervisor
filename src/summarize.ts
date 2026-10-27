@@ -1,9 +1,9 @@
-// Per-agent progress summaries via a Meta model (days 3-5). The prompt
-// builder is real and tested; the model wiring lands next, once the exact
-// Meta model + API endpoint for the hackathon is confirmed.
+// Per-agent progress summaries via a Meta model: buildProgressPrompt() packs
+// the prompt (pure + tested), llama.ts calls the model. The model name below
+// is announced in the demo video.
 
-/** SET ME: the Meta model used for summaries (announced in the demo video). */
-export const META_MODEL = "SET ME";
+/** The Meta model used for summaries (announced in the demo video). Override per-run with LLAMA_MODEL. */
+export const META_MODEL = "Llama-4-Scout-17B-16E-Instruct";
 
 export interface ProgressInput {
   name: string;
@@ -35,11 +35,11 @@ export interface Summarizer {
   summarize(prompt: string): Promise<string>;
 }
 
-/** Placeholder until the Meta model is wired: shows the shape of the
- *  output without calling anything. */
+/** Fallback when LLAMA_API_KEY is unset: shows the shape of the output
+ *  without calling anything. */
 export const stubSummarizer: Summarizer = {
   async summarize(prompt: string): Promise<string> {
     const first = prompt.split("\n")[0] ?? "";
-    return `[stub, model ${META_MODEL} not wired yet] ${first}`;
+    return `[stub, set LLAMA_API_KEY for ${META_MODEL}] ${first}`;
   },
 };

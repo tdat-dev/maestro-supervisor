@@ -21,6 +21,8 @@ import { suggestPartition } from "./suggest.js";
 import { findCardConflicts } from "./cardconflicts.js";
 import { verdictDone } from "./verdict.js";
 import { formatVerdictLine } from "./report.js";
+import { buildProgressPrompt } from "./summarize.js";
+import { isAuthError, llamaFromEnv } from "./llama.js";
 
 interface Args {
   fleet: string;
@@ -49,10 +51,16 @@ function parseArgs(argv: string[]): Args {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** At most one summary call per agent per window (first poll summarizes now). */
+const SUMMARY_EVERY_MS = 5 * 60_000;
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const cookie = args.cookie ?? process.env.MAESTRO_DASH_COOKIE;
   let tracker: TrackerState = {};
+  const summarizer = llamaFromEnv();
+  const lastSummaryAt = new Map<string, number>();
+  if (!summarizer) console.log("summaries off: set LLAMA_API_KEY to enable per-agent progress summaries.");
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
@@ -131,6 +139,31 @@ async function main(): Promise<void> {
           samples.map((s) => ({ name: s.name, projectDir: s.projectDir, status: s.status })),
         );
         console.log(to ? `    → hand over to ${to.to}? (${to.reason}; needs your click)` : "    → nobody idle to hand over to");
+      }
+      // Progress summaries last: slow network calls never delay the alerts above.
+      // Failures degrade to a one-line warning per agent per window.
+      if (summarizer) {
+        for (const s of samples) {
+          if (s.status === "stopped") continue;
+          if (now - (lastSummaryAt.get(s.id) ?? 0) < SUMMARY_EVERY_MS) continue;
+          lastSummaryAt.set(s.id, now);
+          const agent = snap.agents.find((a) => a.id === s.id);
+          try {
+            const text = await summarizer.summarize(
+              buildProgressPrompt({
+                name: s.name,
+                status: s.finished ? `finished (${s.finished})` : s.status,
+                uptime: agent?.uptime ?? "",
+                cards: cardsOf(boards.get(s.projectDir) ?? { version: 0, lists: [] }, s.name),
+                tail: snap.output[s.id] ?? "",
+              }),
+            );
+            console.log(`  ~ SUMMARY ${s.name}: ${text}`);
+          } catch (e) {
+            const why = isAuthError(e) ? "check LLAMA_API_KEY" : e instanceof Error ? e.message.slice(0, 120) : String(e);
+            console.log(`  ~ SUMMARY ${s.name}: unavailable (${why})`);
+          }
+        }
       }
     } catch (e) {
       console.log(`--- fleet unreachable (${(e as Error).message}). Is Maestro running with Settings → Remote on? Retrying…`);
