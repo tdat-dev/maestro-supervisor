@@ -21,7 +21,7 @@ import { suggestPartition } from "./suggest.js";
 import { findCardConflicts } from "./cardconflicts.js";
 import { verdictDone } from "./verdict.js";
 import { formatVerdictLine } from "./report.js";
-import { readAgentSummary } from "./selfsummary.js";
+import { classifySummary } from "./summarystatus.js";
 
 interface Args {
   fleet: string;
@@ -54,9 +54,8 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const cookie = args.cookie ?? process.env.MAESTRO_DASH_COOKIE;
   let tracker: TrackerState = {};
-  // Agent-written summaries: each agent keeps .maestro/summary-<pane>.md
-  // updated (see docs/AGENT-SUMMARY.md). Printed only when changed.
-  const lastSummary = new Map<string, string>();
+  // Agent-written summaries: missing/stale/fresh per agent, printed on change.
+  const lastSummaryState = new Map<string, string>();
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
@@ -139,10 +138,13 @@ async function main(): Promise<void> {
       // Agent-written summaries last: cheap file reads, printed on change.
       for (const s of samples) {
         if (s.status === "stopped") continue;
-        const text = readAgentSummary(s.projectDir, s.name);
-        if (text === null || text === lastSummary.get(s.id)) continue;
-        lastSummary.set(s.id, text);
-        console.log(`  ~ SUMMARY ${s.name}: ${text}`);
+        const st = classifySummary(s.projectDir, s.name, now);
+        const key = st.kind === "missing" ? "missing" : `${st.kind}:${st.text}`;
+        if (key === lastSummaryState.get(s.id)) continue;
+        lastSummaryState.set(s.id, key);
+        if (st.kind === "fresh") console.log(`  ~ SUMMARY ${s.name}: ${st.text}`);
+        else if (st.kind === "stale") console.log(`  ! STALE-REPORT ${s.name}: last report ${Math.round(st.ageMs / 60000)}m ago: ${st.text}`);
+        else console.log(`  ! NO-REPORT ${s.name}: no summary file (Maestro agents must call summary_write)`);
       }
     } catch (e) {
       console.log(`--- fleet unreachable (${(e as Error).message}). Is Maestro running with Settings → Remote on? Retrying…`);
