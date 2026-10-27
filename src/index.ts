@@ -15,6 +15,7 @@ import {
 } from "./stuck.js";
 import { suggestHandover } from "./handover.js";
 import { collectEvidence } from "./evidence.js";
+import { findCardConflicts } from "./cardconflicts.js";
 import { verdictDone } from "./verdict.js";
 import { formatVerdictLine } from "./report.js";
 
@@ -72,6 +73,15 @@ async function main(): Promise<void> {
         } catch {
           /* a corrupt board is Maestro's news, not ours */
         }
+      }
+      for (const c of findCardConflicts(
+        samples.map((s) => ({
+          name: s.name,
+          projectDir: s.projectDir,
+          cards: cardsOf(boards.get(s.projectDir) ?? { version: 0, lists: [] }, s.name),
+        })),
+      )) {
+        console.log(`  ${c.line}`);
       }
       const time = new Date(now).toLocaleTimeString();
       console.log(`--- ${time}: ${samples.length} agent(s) ---`);
