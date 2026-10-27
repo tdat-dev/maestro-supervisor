@@ -16,6 +16,7 @@ import {
 import { suggestHandover } from "./handover.js";
 import { collectDiffFiles, collectEvidence } from "./evidence.js";
 import { findFileConflicts } from "./fileconflicts.js";
+import { collectRepoKeys } from "./repoid.js";
 import { findCardConflicts } from "./cardconflicts.js";
 import { verdictDone } from "./verdict.js";
 import { formatVerdictLine } from "./report.js";
@@ -91,13 +92,19 @@ async function main(): Promise<void> {
         console.log(`  ${s.name} [${s.status}]${s.finished ? ` (${s.finished})` : ""}${cards.length ? ` — ${cards[0]}` : ""}`);
       }
       // Same-file alarm: one diff listing per project dir per poll.
+      // Repo keys (not raw dirs) so two worktrees of one repo still match.
+      const repoKeys = await collectRepoKeys([...new Set(samples.map((s) => s.projectDir).filter(Boolean))]);
       const diffFilesByDir = new Map<string, string[]>();
       for (const dir of new Set(samples.map((s) => s.projectDir).filter(Boolean))) {
         const { files } = await collectDiffFiles(dir);
         diffFilesByDir.set(dir, files);
       }
       for (const c of findFileConflicts(
-        samples.map((s) => ({ name: s.name, projectDir: s.projectDir, diffFiles: diffFilesByDir.get(s.projectDir) ?? [] })),
+        samples.map((s) => ({
+          name: s.name,
+          projectDir: repoKeys.get(s.projectDir) ?? s.projectDir,
+          diffFiles: diffFilesByDir.get(s.projectDir) ?? [],
+        })),
       )) {
         console.log(`  ${c.line}`);
       }
