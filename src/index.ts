@@ -17,6 +17,7 @@ import { suggestHandover } from "./handover.js";
 import { collectDiffFiles, collectEvidence } from "./evidence.js";
 import { findFileConflicts } from "./fileconflicts.js";
 import { collectRepoKeys } from "./repoid.js";
+import { suggestPartition } from "./suggest.js";
 import { findCardConflicts } from "./cardconflicts.js";
 import { verdictDone } from "./verdict.js";
 import { formatVerdictLine } from "./report.js";
@@ -84,6 +85,7 @@ async function main(): Promise<void> {
         })),
       )) {
         console.log(`  ${c.line}`);
+        console.log(`  ${suggestPartition({ agents: c.agents, target: c.card, kind: "card" })}`);
       }
       const time = new Date(now).toLocaleTimeString();
       console.log(`--- ${time}: ${samples.length} agent(s) ---`);
@@ -107,6 +109,7 @@ async function main(): Promise<void> {
         })),
       )) {
         console.log(`  ${c.line}`);
+        console.log(`  ${suggestPartition({ agents: c.agents, target: c.file, kind: "file" })}`);
       }
       for (const s of samples) {
         if (!s.finished || !s.projectDir) continue;
